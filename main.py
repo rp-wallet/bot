@@ -10,13 +10,12 @@ from telegram.ext import (
     filters,
 )
 
-# ENV VARIABLES
+# ENV
 TOKEN = os.getenv("TOKEN")
 ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS").split(",")))
 
 logging.basicConfig(level=logging.INFO)
 
-# message tracking
 message_map = {}
 user_state = {}
 
@@ -26,7 +25,7 @@ keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# START MESSAGE
+# START
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Welcome to Support\n\n"
@@ -35,7 +34,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard
     )
 
-# send message to all admins
+# notify all admins
 async def notify_admins(context, text):
     for admin in ADMIN_IDS:
         await context.bot.send_message(admin, text)
@@ -48,24 +47,24 @@ async def forward_to_admins(context, user_id, message_id):
         forwarded_ids.append(msg.message_id)
     return forwarded_ids
 
-# HANDLE USER
+# USER HANDLER
 async def handle_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.chat_id
     text = update.message.text
 
-    # I PAID FLOW
+    # I PAID
     if text == "💰 I Paid":
         user_state[user_id] = "awaiting_payment"
         await update.message.reply_text("Send your TXID or wallet details.")
         return
 
-    # QUESTION FLOW
+    # QUESTION
     if text == "❓ Ask Question":
         user_state[user_id] = "question"
         await update.message.reply_text("Type your question.")
         return
 
-    # PAYMENT SUBMISSION
+    # PAYMENT FLOW
     if user_state.get(user_id) == "awaiting_payment":
         forwarded_ids = await forward_to_admins(
             context, user_id, update.message.message_id
@@ -76,7 +75,7 @@ async def handle_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text("✅ Payment received. Verifying shortly.")
 
-        # reminder after 10 mins
+        # reminder
         async def reminder():
             await asyncio.sleep(600)
             for fid in forwarded_ids:
@@ -90,7 +89,7 @@ async def handle_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         asyncio.create_task(reminder())
         return
 
-    # QUESTION SUBMISSION
+    # QUESTION FLOW
     if user_state.get(user_id) == "question":
         forwarded_ids = await forward_to_admins(
             context, user_id, update.message.message_id
@@ -102,7 +101,7 @@ async def handle_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📩 Sent to support.")
         return
 
-    # DEFAULT (forward everything)
+    # DEFAULT FORWARD
     forwarded_ids = await forward_to_admins(
         context, user_id, update.message.message_id
     )
@@ -110,7 +109,7 @@ async def handle_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for fid in forwarded_ids:
         message_map[fid] = user_id
 
-# ADMIN REPLY → USER
+# ADMIN REPLY
 async def handle_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
@@ -125,7 +124,7 @@ async def handle_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             del message_map[msg_id]
 
-# MANUAL MESSAGE COMMAND
+# MANUAL MESSAGE
 # /msg user_id message
 async def manual_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
@@ -138,7 +137,8 @@ async def manual_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         await update.message.reply_text("Usage: /msg user_id message")
 
-def main():
+# MAIN (FIXED FOR PYTHON 3.14)
+async def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -153,7 +153,7 @@ def main():
     app.add_handler(MessageHandler(filters.ChatType.PRIVATE, handle_user))
 
     print("Bot running...")
-    app.run_polling()
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
