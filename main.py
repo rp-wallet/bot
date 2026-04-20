@@ -10,16 +10,19 @@ from telegram.ext import (
     filters,
 )
 
-# ENV
+# ENV VARIABLES
 TOKEN = os.getenv("TOKEN")
 ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS").split(",")))
 
 logging.basicConfig(level=logging.INFO)
 
+# store forwarded message -> user mapping
 message_map = {}
+
+# user state
 user_state = {}
 
-# UI buttons
+# keyboard
 keyboard = ReplyKeyboardMarkup(
     [["💰 I Paid", "❓ Ask Question"]],
     resize_keyboard=True
@@ -52,19 +55,19 @@ async def handle_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.chat_id
     text = update.message.text
 
-    # I PAID
+    # I PAID FLOW
     if text == "💰 I Paid":
         user_state[user_id] = "awaiting_payment"
         await update.message.reply_text("Send your TXID or wallet details.")
         return
 
-    # QUESTION
+    # QUESTION FLOW
     if text == "❓ Ask Question":
         user_state[user_id] = "question"
         await update.message.reply_text("Type your question.")
         return
 
-    # PAYMENT FLOW
+    # PAYMENT SUBMISSION
     if user_state.get(user_id) == "awaiting_payment":
         forwarded_ids = await forward_to_admins(
             context, user_id, update.message.message_id
@@ -75,7 +78,7 @@ async def handle_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text("✅ Payment received. Verifying shortly.")
 
-        # reminder
+        # reminder after 10 minutes
         async def reminder():
             await asyncio.sleep(600)
             for fid in forwarded_ids:
@@ -89,7 +92,7 @@ async def handle_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         asyncio.create_task(reminder())
         return
 
-    # QUESTION FLOW
+    # QUESTION SUBMISSION
     if user_state.get(user_id) == "question":
         forwarded_ids = await forward_to_admins(
             context, user_id, update.message.message_id
@@ -101,7 +104,7 @@ async def handle_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📩 Sent to support.")
         return
 
-    # DEFAULT FORWARD
+    # DEFAULT: forward everything
     forwarded_ids = await forward_to_admins(
         context, user_id, update.message.message_id
     )
@@ -109,7 +112,7 @@ async def handle_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for fid in forwarded_ids:
         message_map[fid] = user_id
 
-# ADMIN REPLY
+# ADMIN REPLY HANDLER
 async def handle_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
@@ -122,9 +125,10 @@ async def handle_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await context.bot.send_message(user_id, update.message.text)
 
+            # mark handled
             del message_map[msg_id]
 
-# MANUAL MESSAGE
+# MANUAL MESSAGE COMMAND
 # /msg user_id message
 async def manual_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
@@ -137,8 +141,8 @@ async def manual_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         await update.message.reply_text("Usage: /msg user_id message")
 
-# MAIN (FIXED FOR PYTHON 3.14)
-async def main():
+# MAIN
+def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -153,7 +157,7 @@ async def main():
     app.add_handler(MessageHandler(filters.ChatType.PRIVATE, handle_user))
 
     print("Bot running...")
-    await app.run_polling()
+    app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
